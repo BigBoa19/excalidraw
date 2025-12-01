@@ -126,12 +126,40 @@ export const libraryItemsAtom = atom<{
 
 export const libraryCollectionsAtom = atom<LibraryCollections>([]);
 
+/** Active collection ID, for filtering/default actions */
+export const activeCollectionIdAtom = atom<string>(DEFAULT_COLLECTION_ID);
+
+/** Last used collection ID, default option when adding item to library */
+export const lastUsedCollectionIdAtom = atom<string>(DEFAULT_COLLECTION_ID);
+
+/** Collapse state for each collection */
+export const collectionCollapseStateAtom = atom<Map<string, boolean>>(
+  new Map(),
+);
+
+/** Collection currently being edited, for the rename feature */
+export const editingCollectionIdAtom = atom<string | null>(null);
+
 const cloneLibraryItems = (libraryItems: LibraryItems): LibraryItems =>
   cloneJSON(libraryItems);
 
 const cloneLibraryCollections = (
   collections: LibraryCollections,
 ): LibraryCollections => cloneJSON(collections);
+
+export const getCollectionItems = (
+  libraryItems: LibraryItems,
+  collectionId: string,
+): LibraryItems => {
+  return libraryItems.filter(item => item.collectionId === collectionId);
+};
+
+export const getCollectionById = (
+  collections: LibraryCollections,
+  collectionId: string,
+): LibraryCollection | undefined => {
+  return collections.find(c => c.id === collectionId);
+};
 
 /**
  * checks if library item does not exist already in current library
@@ -305,8 +333,6 @@ class Library {
       id: DEFAULT_COLLECTION_ID,
       name: "Default",
       created: Date.now(),
-      items: [],
-      color: "#000000",
     };
   }
   createPublishedCollection = (): LibraryCollection => {
@@ -314,32 +340,104 @@ class Library {
       id: PUBLISHED_COLLECTION_ID,
       name: "Published",
       created: Date.now(),
-      items: [],
-      color: "#FF0000",
     };
   }
 
   createLibraryCollection = async (
     name: string,
-    color?: string,
   ): Promise<LibraryCollection> => {
     const collection: LibraryCollection = {
       id: randomId(),
       name,
       created: Date.now(),
-      items: [],
-      color: color || "#000000",
     };
 
     await this.setCollections((current) => [...current, collection]);
+    
+    editorJotaiStore.set(activeCollectionIdAtom, collection.id);
+    editorJotaiStore.set(lastUsedCollectionIdAtom, collection.id);
+    
     return collection;
   };
 
   deleteLibraryCollection = async (
-    collectionId: string
+    collectionId: string,
   ): Promise<void> => {
-    await this.setCollections((current) => current.filter((collection) => collection.id !== collectionId));
+    if (collectionId === DEFAULT_COLLECTION_ID || collectionId === PUBLISHED_COLLECTION_ID) {
+      throw new Error("Cannot delete default or published collections");
+    }
+
+    await this.setLibrary(
+      this.currLibraryItems.filter(item => item.collectionId !== collectionId)
+    );
+
+    await this.setCollections((current) => 
+      current.filter((collection) => collection.id !== collectionId)
+    );
+    
+    const currentActive = editorJotaiStore.get(activeCollectionIdAtom);
+    if (currentActive === collectionId) {
+      editorJotaiStore.set(activeCollectionIdAtom, DEFAULT_COLLECTION_ID);
+    }
+    
+    const currentLastUsed = editorJotaiStore.get(lastUsedCollectionIdAtom);
+    if (currentLastUsed === collectionId) {
+      editorJotaiStore.set(lastUsedCollectionIdAtom, DEFAULT_COLLECTION_ID);
+    }
   }
+
+  renameLibraryCollection = async (
+    collectionId: string,
+    name: string,
+  ): Promise<void> => {
+    if (!name.trim()) {
+      throw new Error("Collection name cannot be empty");
+    }
+
+    await this.setCollections((current) =>
+      current.map((collection) =>
+        collection.id === collectionId
+          ? { ...collection, name: name.trim() }
+          : collection
+      )
+    );
+  };
+
+  addItemToCollection = async (
+    collectionId: string,
+    elements: readonly NonDeleted<ExcalidrawElement>[],
+  ): Promise<LibraryItem> => {
+    const newItem: LibraryItem = {
+      id: randomId(),
+      status: "unpublished",
+      elements: elements,
+      created: Date.now(),
+      collectionId,
+    };
+
+    await this.setLibrary([newItem, ...this.currLibraryItems]);
+    
+    editorJotaiStore.set(lastUsedCollectionIdAtom, collectionId);
+    
+    return newItem;
+  };
+
+  removeItemsFromCollection = async (
+    collectionId: string,
+    itemIds: string[],
+  ): Promise<void> => {
+    await this.setLibrary(
+      this.currLibraryItems.filter(
+        item => !(item.collectionId === collectionId && itemIds.includes(item.id))
+      )
+    );
+  };
+
+  getItemsByCollection = (collectionId: string): LibraryItems => {
+    return this.currLibraryItems.filter(
+      item => item.collectionId === collectionId
+    );
+  };
 
   setCollections = (
     collections:
