@@ -32,10 +32,11 @@ import "./LibraryMenuItems.scss";
 
 import { TextField } from "./TextField";
 
-import { useEditorInterface } from "./App";
+import { useEditorInterface, useApp } from "./App";
 
 import { Button } from "./Button";
-import { collapseDownIcon, collapseUpIcon } from "./icons";
+import { collapseDownIcon, collapseUpIcon, PlusIcon } from "./icons";
+import { CreateCollectionDialog } from "./CreateCollectionDialog";
 
 import type { ExcalidrawLibraryIds } from "../data/types";
 
@@ -76,6 +77,7 @@ export default function LibraryMenuItems({
   selectedItems: LibraryItem["id"][];
   onSelectItems: (id: LibraryItem["id"][]) => void;
 }) {
+  const { library } = useApp();
   const editorInterface = useEditorInterface();
   const libraryContainerRef = useRef<HTMLDivElement>(null);
   const scrollPosition = useScrollPosition<HTMLDivElement>(libraryContainerRef);
@@ -96,6 +98,8 @@ export default function LibraryMenuItems({
   const [isPersonalLibraryCollapsed, setIsPersonalLibraryCollapsed] =
     useState(false);
   const [isExcalidrawLibraryCollapsed, setIsExcalidrawLibraryCollapsed] =
+    useState(false);
+  const [showCreateCollectionDialog, setShowCreateCollectionDialog] =
     useState(false);
 
   const IS_LIBRARY_EMPTY = !libraryItems.length && !pendingElements.length;
@@ -247,6 +251,19 @@ export default function LibraryMenuItems({
       }
     },
     [getInsertedElements, onInsertLibraryItems],
+  );
+
+  const handleCreateCollection = useCallback(
+    async (name: string) => {
+      try {
+        await library.createLibraryCollection(name);
+        setShowCreateCollectionDialog(false);
+      } catch (error: any) {
+        console.error("Failed to create collection:", error);
+        alert(error.message || "Failed to create collection");
+      }
+    },
+    [library],
   );
 
   const itemsRenderedPerBatch =
@@ -459,7 +476,31 @@ export default function LibraryMenuItems({
             theme={theme}
           />
         )}
+
+        {!IS_LIBRARY_EMPTY && (
+          <div
+            style={{
+              padding: "12px",
+              borderTop: "1px solid var(--color-gray-20)",
+            }}
+          >
+            <Button
+              onSelect={() => setShowCreateCollectionDialog(true)}
+              style={{ width: "100%" }}
+              icon={PlusIcon}
+            >
+              New Collection
+            </Button>
+          </div>
+        )}
       </Stack.Col>
+
+      {showCreateCollectionDialog && (
+        <CreateCollectionDialog
+          onConfirm={handleCreateCollection}
+          onCancel={() => setShowCreateCollectionDialog(false)}
+        />
+      )}
     </div>
   );
 }
