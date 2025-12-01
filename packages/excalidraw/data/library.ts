@@ -59,8 +59,8 @@ const ALLOWED_LIBRARY_URLS = [
   // when installing from github PRs
   "raw.githubusercontent.com/excalidraw/excalidraw-libraries",
 ];
-const DEFAULT_COLLECTION_ID = "default";
-const PUBLISHED_COLLECTION_ID = "published";
+export const DEFAULT_COLLECTION_ID = "default";
+export const PUBLISHED_COLLECTION_ID = "published";
 
 type LibraryUpdate = {
   /** deleted library items since last onLibraryChange event */
@@ -512,6 +512,10 @@ class Library {
     });
   };
 
+  setCollectionCollapseState = (state: Map<string, boolean>): void => {
+    editorJotaiStore.set(collectionCollapseStateAtom, new Map(state));
+  };
+
   /**
    * @returns latest cloned libraryItems. Awaits all in-progress updates first.
    */
@@ -817,6 +821,31 @@ class AdapterTransaction {
     return task();
   }
 
+  static async getLibraryData(
+    adapter: LibraryPersistenceAdapter,
+    source: LibraryAdatapterSource,
+    _queue = true,
+  ): Promise<{ items: LibraryItems; collections: LibraryCollections }> {
+    const task = () =>
+      new Promise<{ items: LibraryItems; collections: LibraryCollections }>(
+        async (resolve, reject) => {
+          try {
+            const data = await adapter.load({ source });
+            const migrated = migrateLibraryData(data, "published");
+            resolve({ items: migrated.items, collections: migrated.collections });
+          } catch (error: any) {
+            reject(error);
+          }
+        },
+      );
+
+    if (_queue) {
+      return AdapterTransaction.queue.push(task);
+    }
+
+    return task();
+  }
+
   static run = async <T>(
     adapter: LibraryPersistenceAdapter,
     fn: (transaction: AdapterTransaction) => Promise<T>,
@@ -835,6 +864,10 @@ class AdapterTransaction {
 
   getLibraryItems(source: LibraryAdatapterSource) {
     return AdapterTransaction.getLibraryItems(this.adapter, source, false);
+  }
+
+  getLibraryData(source: LibraryAdatapterSource) {
+    return AdapterTransaction.getLibraryData(this.adapter, source, false);
   }
 }
 
@@ -1129,17 +1162,31 @@ export const useHandleLibrary = (
                 // and skip persisting to new data store, as well as well
                 // clearing the old store via `migrationAdapter.clear()`
                 if (!libraryData) {
-                  const items = await AdapterTransaction.getLibraryItems(
+                  const data = await AdapterTransaction.getLibraryData(
                     adapter,
                     "load",
                   );
-                  return { items, collections: null };
+                  return { items: data.items, collections: data.collections };
                 }
 
                 restoredData = restoreLibraryItems(
                   libraryData.libraryItems || [],
                   "published",
+                  DEFAULT_COLLECTION_ID,
                 );
+
+                const defaultCollections: LibraryCollections = [
+                  {
+                    id: DEFAULT_COLLECTION_ID,
+                    name: "Default",
+                    created: Date.now(),
+                  },
+                  {
+                    id: PUBLISHED_COLLECTION_ID,
+                    name: "Published",
+                    created: Date.now(),
+                  },
+                ];
 
                 // we don't queue this operation because it's running inside
                 // a promise that's running inside Library update queue itself
@@ -1155,34 +1202,47 @@ export const useHandleLibrary = (
                   );
                 }
                 // migration suceeded, load migrated data
-                return { items: nextItems, collections: null };
+                return { items: nextItems, collections: defaultCollections };
               } catch (error: any) {
                 console.error(
                   `couldn't migrate legacy library data: ${error.message}`,
                 );
                 // migration failed, load data from previous store, if any
-                return restoredData
-                  ? { items: restoredData, collections: null }
-                  : null;
+                if (restoredData) {
+                  const defaultCollections: LibraryCollections = [
+                    {
+                      id: DEFAULT_COLLECTION_ID,
+                      name: "Default",
+                      created: Date.now(),
+                    },
+                    {
+                      id: PUBLISHED_COLLECTION_ID,
+                      name: "Published",
+                      created: Date.now(),
+                    },
+                  ];
+                  return { items: restoredData, collections: defaultCollections };
+                }
+                return null;
               }
             })
             // errors caught during `migrationAdapter.load()`
             .catch(async (error: any) => {
               console.error(`error during library migration: ${error.message}`);
               // as a default, load latest library from current data source
-              const items = await AdapterTransaction.getLibraryItems(
+              const data = await AdapterTransaction.getLibraryData(
                 adapter,
                 "load",
               );
-              return { items, collections: null };
+              return { items: data.items, collections: data.collections };
             }),
         );
       } else {
         initDataPromise.resolve(
-          promiseTry(() => adapter.load({ source: "load" })).then((data) => ({
-            items: restoreLibraryItems(data?.libraryItems || [], "published"),
-            collections: data?.libraryCollections || null,
-          })),
+          promiseTry(() => adapter.load({ source: "load" })).then((data) => {
+            const migrated = migrateLibraryData(data, "published");
+            return { items: migrated.items, collections: migrated.collections };
+          }),
         );
       }
 
