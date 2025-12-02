@@ -224,10 +224,7 @@ class Library {
 
   constructor(app: App) {
     this.app = app;
-    this.libraryCollections = [
-      this.createDefaultCollection(),
-      this.createPublishedCollection(),
-    ]
+    this.libraryCollections = [];
 
     latestLibraryCollectionsSnapshot = cloneLibraryCollections(
       this.libraryCollections,
@@ -300,25 +297,6 @@ class Library {
     return this.setLibrary([]);
   };
 
-  createDefaultCollection = (): LibraryCollection => {
-    return {
-      id: DEFAULT_COLLECTION_ID,
-      name: "Default",
-      created: Date.now(),
-      items: [],
-      color: "#000000",
-    };
-  }
-  createPublishedCollection = (): LibraryCollection => {
-    return {
-      id: PUBLISHED_COLLECTION_ID,
-      name: "Published",
-      created: Date.now(),
-      items: [],
-      color: "#FF0000",
-    };
-  }
-
   createLibraryCollection = async (
     name: string,
     color?: string,
@@ -379,9 +357,10 @@ class Library {
           console.error(error);
         }
 
-        onLibraryCollectionsUpdateEmitter.trigger(
-          cloneLibraryCollections(this.libraryCollections),
+        const collectionsToEmit = cloneLibraryCollections(
+          this.libraryCollections,
         );
+        onLibraryCollectionsUpdateEmitter.trigger(collectionsToEmit);
 
         resolve(this.libraryCollections);
       } catch (error: any) {
@@ -1027,6 +1006,18 @@ export const useHandleLibrary = (
             .then(async (libraryData) => {
               let restoredData: LibraryItems | null = null;
               try {
+                // Load collections from the regular adapter (not migration adapter)
+                const adapterData = await adapter.load({ source: "load" });
+                const collections = adapterData?.libraryCollections || null;
+                
+                console.log("Migration path - adapter load result:", {
+                  hasData: !!adapterData,
+                  hasLibraryItems: !!adapterData?.libraryItems,
+                  hasLibraryCollections: !!adapterData?.libraryCollections,
+                  libraryCollectionsLength: adapterData?.libraryCollections?.length || 0,
+                  libraryCollections: adapterData?.libraryCollections,
+                });
+                
                 // if no library data to migrate, assume no migration needed
                 // and skip persisting to new data store, as well as well
                 // clearing the old store via `migrationAdapter.clear()`
@@ -1035,7 +1026,7 @@ export const useHandleLibrary = (
                     adapter,
                     "load",
                   );
-                  return { items, collections: null };
+                  return { items, collections };
                 }
 
                 restoredData = restoreLibraryItems(
@@ -1057,15 +1048,23 @@ export const useHandleLibrary = (
                   );
                 }
                 // migration suceeded, load migrated data
-                return { items: nextItems, collections: null };
+                return { items: nextItems, collections };
               } catch (error: any) {
                 console.error(
                   `couldn't migrate legacy library data: ${error.message}`,
                 );
                 // migration failed, load data from previous store, if any
+                // Still try to load collections from adapter
+                let collections: LibraryCollections | null = null;
+                try {
+                  const adapterData = await promiseTry(() => adapter.load({ source: "load" }));
+                  collections = adapterData?.libraryCollections || null;
+                } catch {
+                  // ignore errors loading collections
+                }
                 return restoredData
-                  ? { items: restoredData, collections: null }
-                  : null;
+                  ? { items: restoredData, collections }
+                  : { items: [], collections };
               }
             })
             // errors caught during `migrationAdapter.load()`
@@ -1076,15 +1075,33 @@ export const useHandleLibrary = (
                 adapter,
                 "load",
               );
-              return { items, collections: null };
+              // Also load collections from adapter
+              let collections: LibraryCollections | null = null;
+              try {
+                const adapterData = await promiseTry(() => adapter.load({ source: "load" }));
+                collections = adapterData?.libraryCollections || null;
+              } catch {
+                // ignore errors loading collections
+              }
+              return { items, collections };
             }),
         );
       } else {
         initDataPromise.resolve(
-          promiseTry(() => adapter.load({ source: "load" })).then((data) => ({
-            items: restoreLibraryItems(data?.libraryItems || [], "published"),
-            collections: data?.libraryCollections || null,
-          })),
+          promiseTry(() => adapter.load({ source: "load" })).then((data) => {
+            console.log("Adapter load result:", {
+              hasData: !!data,
+              hasLibraryItems: !!data?.libraryItems,
+              hasLibraryCollections: !!data?.libraryCollections,
+              libraryItemsLength: data?.libraryItems?.length || 0,
+              libraryCollectionsLength: data?.libraryCollections?.length || 0,
+              libraryCollections: data?.libraryCollections,
+            });
+            return {
+              items: restoreLibraryItems(data?.libraryItems || [], "published"),
+              collections: data?.libraryCollections || null,
+            };
+          }),
         );
       }
 
@@ -1110,15 +1127,33 @@ export const useHandleLibrary = (
           isLibraryLoadedRef.current = true;
         });
 
-      initCollectionsPromise.then((collections) => {
-        if (
-          collections &&
-          collections.length &&
-          optsRef.current.excalidrawAPI?.setLibraryCollection
-        ) {
-          optsRef.current.excalidrawAPI
-            .setLibraryCollection(collections)
-            .catch((error) => console.error(error));
+      initCollectionsPromise.then(async (collections) => {
+        if (optsRef.current.excalidrawAPI?.setLibraryCollection) {
+          // Only load custom collections - filter out any default/published collections
+          // that might have been saved (they're not needed since UI filters by status)
+          const customCollections = collections
+            ? collections.filter(
+                (c) =>
+                  c.id !== DEFAULT_COLLECTION_ID &&
+                  c.id !== PUBLISHED_COLLECTION_ID,
+              )
+            : [];
+          
+          console.log("Loading collections from storage:", {
+            raw: collections,
+            filtered: customCollections,
+          });
+          
+          if (customCollections.length > 0) {
+            await optsRef.current.excalidrawAPI
+              .setLibraryCollection(customCollections)
+              .catch((error) => console.error(error));
+          } else {
+            // Set empty array to ensure atom is initialized
+            await optsRef.current.excalidrawAPI
+              .setLibraryCollection([])
+              .catch((error) => console.error(error));
+          }
         }
       });
     }

@@ -6,7 +6,7 @@ import { muteFSAbortError } from "@excalidraw/common";
 import { useUIAppState } from "../context/ui-appState";
 import { fileOpen } from "../data/filesystem";
 import { saveLibraryAsJSON } from "../data/json";
-import { libraryItemsAtom } from "../data/library";
+import { libraryItemsAtom, libraryCollectionsAtom } from "../data/library";
 import { useAtom } from "../editor-jotai";
 import { useLibraryCache } from "../hooks/useLibraryItemSvg";
 import { t } from "../i18n";
@@ -57,6 +57,7 @@ export const LibraryDropdownMenuButton: React.FC<{
   className,
 }) => {
   const [libraryItemsData] = useAtom(libraryItemsAtom);
+  const [libraryCollections] = useAtom(libraryCollectionsAtom);
   const [isLibraryMenuOpen, setIsLibraryMenuOpen] = useAtom(
     isLibraryMenuOpenAtom,
   );
@@ -223,7 +224,14 @@ export const LibraryDropdownMenuButton: React.FC<{
               try {
                 // `library` prop is passed to this component
                 // create collection and swallow any error showing it to the user
-                await library.createLibraryCollection(name);
+                const newCollection = await library.createLibraryCollection(name);
+                // Log the newly created collection to verify it was created
+                console.log("Created collection:", newCollection);
+                // Collections are automatically updated in libraryCollectionsAtom
+                // Access all collections after creation completes
+                const allCollections = await library.getCollections();
+                console.log("All collections:", allCollections);
+                // The collection is now available in libraryCollectionsAtom and can be displayed in the UI
               } catch (error: any) {
                 setAppState({ errorMessage: error?.message || String(error) });
               }

@@ -17,6 +17,8 @@ import { deburr } from "../deburr";
 import { useLibraryCache } from "../hooks/useLibraryItemSvg";
 import { useScrollPosition } from "../hooks/useScrollPosition";
 import { t } from "../i18n";
+import { libraryCollectionsAtom } from "../data/library";
+import { useAtom } from "../editor-jotai";
 
 import { LibraryMenuControlButtons } from "./LibraryMenuControlButtons";
 import { CollectionHeaderDropdown, LibraryDropdownMenu } from "./LibraryMenuHeaderContent";
@@ -43,6 +45,7 @@ import type {
   ExcalidrawProps,
   LibraryItem,
   LibraryItems,
+  LibraryCollection,
   UIAppState,
 } from "../types";
 
@@ -52,6 +55,9 @@ const ITEMS_RENDERED_PER_BATCH = 17;
 // when render outputs cached we can render many more items per batch to
 // speed it up
 const CACHED_ITEMS_RENDERED_PER_BATCH = 64;
+
+const DEFAULT_COLLECTION_ID = "default";
+const PUBLISHED_COLLECTION_ID = "published";
 
 export default function LibraryMenuItems({
   isLoading,
@@ -69,7 +75,7 @@ export default function LibraryMenuItems({
   libraryItems: LibraryItems;
   pendingElements: LibraryItem["elements"];
   onInsertLibraryItems: (libraryItems: LibraryItems) => void;
-  onAddToLibrary: (elements: LibraryItem["elements"]) => void;
+  onAddToLibrary: (elements: LibraryItem["elements"], collectionId?: string) => void;
   libraryReturnUrl: ExcalidrawProps["libraryReturnUrl"];
   theme: UIAppState["theme"];
   id: string;
@@ -97,6 +103,11 @@ export default function LibraryMenuItems({
     useState(false);
   const [isExcalidrawLibraryCollapsed, setIsExcalidrawLibraryCollapsed] =
     useState(false);
+  
+  const [libraryCollections] = useAtom(libraryCollectionsAtom);
+  const [customCollectionCollapsed, setCustomCollectionCollapsed] = useState<
+    Record<string, boolean>
+  >({});
 
   const IS_LIBRARY_EMPTY = !libraryItems.length && !pendingElements.length;
 
@@ -116,9 +127,42 @@ export default function LibraryMenuItems({
     });
   }, [libraryItems, searchInputValue]);
 
+  // Filter custom collections (exclude default and published collections)
+  const customCollections = useMemo(() => {
+    const filtered = libraryCollections.filter(
+      (collection) =>
+        collection.id !== DEFAULT_COLLECTION_ID &&
+        collection.id !== PUBLISHED_COLLECTION_ID,
+    );
+    // Debug: log collections to help troubleshoot
+    if (filtered.length > 0) {
+      console.log("Custom collections found:", filtered);
+    }
+    return filtered;
+  }, [libraryCollections]);
+
+  // Get items for each custom collection
+  const customCollectionItems = useMemo(() => {
+    const itemsMap: Record<string, LibraryItems> = {};
+    customCollections.forEach((collection) => {
+      itemsMap[collection.id] = libraryItems.filter(
+        (item) => item.collectionId === collection.id,
+      );
+    });
+    return itemsMap;
+  }, [customCollections, libraryItems]);
+
+  // Unpublished items that don't belong to any custom collection
   const unpublishedItems = useMemo(
-    () => libraryItems.filter((item) => item.status !== "published"),
-    [libraryItems],
+    () =>
+      libraryItems.filter(
+        (item) =>
+          item.status !== "published" &&
+          (!item.collectionId ||
+            item.collectionId === DEFAULT_COLLECTION_ID ||
+            !customCollections.some((c) => c.id === item.collectionId)),
+      ),
+    [libraryItems, customCollections],
   );
 
   const publishedItems = useMemo(
@@ -129,7 +173,15 @@ export default function LibraryMenuItems({
   const onItemSelectToggle = useCallback(
     (id: LibraryItem["id"], event: React.MouseEvent) => {
       const shouldSelect = !selectedItems.includes(id);
-      const orderedItems = [...unpublishedItems, ...publishedItems];
+      // Build ordered items list: unpublished, then custom collections, then published
+      const customCollectionItemsList = customCollections.flatMap(
+        (collection) => customCollectionItems[collection.id] || [],
+      );
+      const orderedItems = [
+        ...unpublishedItems,
+        ...customCollectionItemsList,
+        ...publishedItems,
+      ];
       if (shouldSelect) {
         if (event.shiftKey && lastSelectedItem) {
           const rangeStart = orderedItems.findIndex(
@@ -174,6 +226,8 @@ export default function LibraryMenuItems({
       publishedItems,
       selectedItems,
       unpublishedItems,
+      customCollections,
+      customCollectionItems,
     ],
   );
 
@@ -236,9 +290,12 @@ export default function LibraryMenuItems({
     [selectedItems],
   );
 
-  const onAddToLibraryClick = useCallback(() => {
-    onAddToLibrary(pendingElements);
-  }, [pendingElements, onAddToLibrary]);
+  const onAddToLibraryClick = useCallback(
+    (collectionId?: string) => {
+      onAddToLibrary(pendingElements, collectionId);
+    },
+    [pendingElements, onAddToLibrary],
+  );
 
   const onItemClick = useCallback(
     (id: LibraryItem["id"] | null) => {
@@ -327,7 +384,7 @@ export default function LibraryMenuItems({
                 items={[{ id: null, elements: pendingElements }]}
                 onItemSelectToggle={onItemSelectToggle}
                 onItemDrag={onItemDrag}
-                onClick={onAddToLibraryClick}
+                onClick={() => onAddToLibraryClick(undefined)}
                 isItemSelected={isItemSelected}
                 svgCache={svgCache}
               />
@@ -398,6 +455,97 @@ export default function LibraryMenuItems({
           />
         </LibraryMenuSectionGrid>
       )}
+
+      {/* Custom Collections */}
+      {customCollections.map((collection) => {
+        const collectionItems = customCollectionItems[collection.id] || [];
+        const isCollapsed = customCollectionCollapsed[collection.id] ?? false;
+
+        return (
+          <React.Fragment key={collection.id}>
+            <div
+              className="library-menu-items-container__header"
+              style={{ marginTop: "0.75rem" }}
+            >
+              <span
+                onClick={() =>
+                  setCustomCollectionCollapsed((prev) => ({
+                    ...prev,
+                    [collection.id]: !isCollapsed,
+                  }))
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flex: 1,
+                  cursor: "pointer",
+                }}
+              >
+                <span>{collection.name}</span>
+                <span className="library-menu-items-container__header__arrow">
+                  {isCollapsed ? collapseDownIcon : collapseUpIcon}
+                </span>
+              </span>
+              <CollectionHeaderDropdown
+                collectionName={collection.name}
+                onRename={() => {
+                  const newName = window.prompt(
+                    "Rename collection",
+                    collection.name,
+                  );
+                  if (newName) {
+                    // TODO: Rename collection
+                    console.log("Rename to:", newName);
+                  }
+                }}
+                onDelete={() => {
+                  if (
+                    window.confirm(
+                      `Delete "${collection.name}" collection?`,
+                    )
+                  ) {
+                    // TODO: Delete collection
+                    console.log("Delete collection");
+                  }
+                }}
+              />
+            </div>
+            {!isCollapsed &&
+              (collectionItems.length === 0 && !pendingElements.length ? (
+                <div className="library-menu-items__no-items">
+                  <div className="library-menu-items__no-items__hint">
+                    {t("library.hint_emptyLibrary")}
+                  </div>
+                </div>
+              ) : (
+                <LibraryMenuSectionGrid>
+                  {pendingElements.length > 0 && (
+                    <LibraryMenuSection
+                      itemsRenderedPerBatch={itemsRenderedPerBatch}
+                      items={[{ id: null, elements: pendingElements }]}
+                      onItemSelectToggle={onItemSelectToggle}
+                      onItemDrag={onItemDrag}
+                      onClick={() => onAddToLibraryClick(collection.id)}
+                      isItemSelected={isItemSelected}
+                      svgCache={svgCache}
+                    />
+                  )}
+                  {collectionItems.length > 0 && (
+                    <LibraryMenuSection
+                      itemsRenderedPerBatch={itemsRenderedPerBatch}
+                      items={collectionItems}
+                      onItemSelectToggle={onItemSelectToggle}
+                      onItemDrag={onItemDrag}
+                      onClick={onItemClick}
+                      isItemSelected={isItemSelected}
+                      svgCache={svgCache}
+                    />
+                  )}
+                </LibraryMenuSectionGrid>
+              ))}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 
