@@ -19,6 +19,7 @@ import PublishLibrary from "./PublishLibrary";
 import { ToolButton } from "./ToolButton";
 import Trans from "./Trans";
 import DropdownMenu from "./dropdownMenu/DropdownMenu";
+import { TextField } from "./TextField";
 import {
   DotsIcon,
   ExportIcon,
@@ -90,6 +91,10 @@ export const LibraryDropdownMenuButton: React.FC<{
   };
 
   const [showRemoveLibAlert, setShowRemoveLibAlert] = useState(false);
+
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   const itemsSelected = !!selectedItems.length;
   const items = itemsSelected
@@ -215,26 +220,9 @@ export const LibraryDropdownMenuButton: React.FC<{
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Item
-            onSelect={async () => {
-              // prompt for a collection name and create a new library collection
-              const name = window.prompt("Create library");
-              if (!name) {
-                return;
-              }
-              try {
-                // `library` prop is passed to this component
-                // create collection and swallow any error showing it to the user
-                const newCollection = await library.createLibraryCollection(name);
-                // Log the newly created collection to verify it was created
-                console.log("Created collection:", newCollection);
-                // Collections are automatically updated in libraryCollectionsAtom
-                // Access all collections after creation completes
-                const allCollections = await library.getCollections();
-                console.log("All collections:", allCollections);
-                // The collection is now available in libraryCollectionsAtom and can be displayed in the UI
-              } catch (error: any) {
-                setAppState({ errorMessage: error?.message || String(error) });
-              }
+            onSelect={() => {
+              // open the create collection dialog (rendered below)
+              setShowCreateDialog(true);
             }}
             icon={PlusIcon}
             data-testid="lib-dropdown--create"
@@ -279,6 +267,66 @@ export const LibraryDropdownMenuButton: React.FC<{
         <div className="library-actions-counter">{selectedItems.length}</div>
       )}
       {showRemoveLibAlert && renderRemoveLibAlert()}
+      {showCreateDialog && (
+        <Dialog
+          onCloseRequest={() => {
+            setShowCreateDialog(false);
+            setNewCollectionName("");
+          }}
+          title={"Create library"}
+          size="small"
+          className="create-library-dialog"
+        >
+          <p className="create-library-note">
+            Please enter a name for the new library.
+          </p>
+          <div style={{ marginTop: "0.75rem" }}>
+            <TextField
+              type="text"
+              placeholder={"New library name"}
+              value={newCollectionName}
+              onChange={(v: string) => setNewCollectionName(v)}
+              className="create-library-input"
+            />
+          </div>
+          <div className="create-library-actions">
+            <ToolButton
+              type="button"
+              title={"Cancel"}
+              aria-label={"Cancel"}
+              label={"Cancel"}
+              className="create-library-cancel"
+              onClick={() => {
+                setShowCreateDialog(false);
+                setNewCollectionName("");
+              }}
+            />
+            <ToolButton
+              type="button"
+              title={"Create"}
+              aria-label={"Create"}
+              label={isCreating ? "Creating..." : "OK"}
+              className="create-library-ok"
+              onClick={async () => {
+                if (!newCollectionName.trim() || isCreating) {
+                  return;
+                }
+                setIsCreating(true);
+                try {
+                  await library.createLibraryCollection(newCollectionName.trim());
+                  setShowCreateDialog(false);
+                  setNewCollectionName("");
+                  setIsLibraryMenuOpen(false);
+                } catch (error: any) {
+                  setAppState({ errorMessage: error?.message || String(error) });
+                } finally {
+                  setIsCreating(false);
+                }
+              }}
+            />
+          </div>
+        </Dialog>
+      )}
       {showPublishLibraryDialog && (
         <PublishLibrary
           onClose={() => setShowPublishLibraryDialog(false)}

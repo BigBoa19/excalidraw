@@ -229,4 +229,63 @@
       }
     }
   }
+
+  /* Dialog styling for create library */
+  .create-library-dialog {
+    .create-library-dialog {
+      .ExcTextField__background {
+        display: none !important;
+      }
+
+      .ExcTextField__wrapper::before {
+        display: none !important; // <-- the one true fix
+      }
+
+      .ExcTextField__input input {
+        height: var(--lg-button-size);
+        border-radius: 8px;
+        border: 1px solid var(--color-border-outline);
+      }
+    }
+
+
+
+
+    .create-library-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    /* Left-aligned Cancel and right-aligned OK. Use project button sizing and border radius */
+    .create-library-cancel {
+      .ToolIcon__icon {
+        background: transparent;
+        color: var(--text-primary-color);
+        padding: 0 1rem;
+        border-radius: var(--border-radius-lg);
+        height: var(--lg-button-size);
+        display: inline-flex;
+        align-items: center;
+        font-weight: 700;
+        border: 1px solid var(--color-border-outline);
+      }
+    }
+
+    .create-library-ok {
+      .ToolIcon__icon {
+        background: var(--color-primary);
+        color: var(--color-primary-light);
+        padding: 0 1.25rem;
+        border-radius: var(--border-radius-lg);
+        height: var(--lg-button-size);
+        display: inline-flex;
+        align-items: center;
+        font-weight: 700;
+        box-shadow: var(--modal-shadow);
+      }
+    }
+  }
 }
