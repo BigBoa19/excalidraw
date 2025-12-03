@@ -518,14 +518,22 @@ export default function LibraryMenuItems({
               </span>
               <CollectionHeaderDropdown
                 collectionName={collection.name}
-                onRename={() => {
+                onRename={async () => {
                   const newName = window.prompt(
                     "Rename collection",
                     collection.name,
                   );
-                  if (newName) {
-                    // TODO: Rename collection
-                    console.log("Rename to:", newName);
+                  if (newName && newName.trim() && newName !== collection.name) {
+                    try {
+                      await app.library.renameLibraryCollection(
+                        collection.id,
+                        newName.trim(),
+                      );
+                    } catch (error: any) {
+                      setAppState({
+                        errorMessage: error?.message || String(error),
+                      });
+                    }
                   }
                 }}
                 onDelete={async () => {

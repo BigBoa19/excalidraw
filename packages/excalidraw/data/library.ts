@@ -326,6 +326,19 @@ class Library {
     await this.setLibrary(itemsWithoutCollection);
   }
 
+  renameLibraryCollection = async (
+    collectionId: string,
+    newName: string,
+  ): Promise<void> => {
+    await this.setCollections((current) =>
+      current.map((collection) =>
+        collection.id === collectionId
+          ? { ...collection, name: newName }
+          : collection,
+      ),
+    );
+  }
+
   setCollections = (
     collections:
       | LibraryCollections

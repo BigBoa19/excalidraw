@@ -846,6 +846,7 @@ export interface ExcalidrawImperativeAPI {
   updateLibrary: InstanceType<typeof Library>["updateLibrary"];
   createLibraryCollection: (name: string, color?: string) => Promise<LibraryCollection>;
   deleteLibraryCollection: (collectionId: string) => Promise<void>;
+  renameLibraryCollection: (collectionId: string, newName: string) => Promise<void>;
   getLibraryCollections: () => Promise<LibraryCollections>;
   setLibraryCollection: (collections: LibraryCollections) => Promise<LibraryCollections>;
   resetScene: InstanceType<typeof App>["resetScene"];
