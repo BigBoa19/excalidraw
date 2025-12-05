@@ -11885,6 +11885,13 @@ class App extends React.Component<AppProps, AppState> {
       (collection) => this.createAddToCollectionAction(collection.id, collection.name),
     );
 
+    const addToLibrarySection: ContextMenuItems = [
+      actionAddToLibrary,
+      ...(collectionActions.length > 0
+        ? ([CONTEXT_MENU_SEPARATOR, ...collectionActions] as ContextMenuItems)
+        : []),
+    ];
+
     return [
       CONTEXT_MENU_SEPARATOR,
       actionCut,
@@ -11909,10 +11916,7 @@ class App extends React.Component<AppProps, AppState> {
       actionWrapTextInContainer,
       actionUngroup,
       CONTEXT_MENU_SEPARATOR,
-      actionAddToLibrary,
-      ...(collectionActions.length > 0
-        ? [CONTEXT_MENU_SEPARATOR, ...collectionActions]
-        : []),
+      ...addToLibrarySection,
       ...zIndexActions,
       CONTEXT_MENU_SEPARATOR,
       actionFlipHorizontal,
