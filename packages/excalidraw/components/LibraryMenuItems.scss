@@ -184,30 +184,40 @@
 
   .collection-header-dropdown-trigger {
     margin-left: 0.5rem;
-    padding: 0.25rem;
+    /* Completely remove the shaded/rounded background so only the icon is visible */
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--border-radius-md);
+    border-radius: 0;
     cursor: pointer;
-    transition: background-color 0.2s ease-in-out;
+    transition: none;
     color: var(--color-primary);
     position: relative;
     z-index: 1;
 
-    &:hover {
-      background-color: var(--color-gray-10);
+    /* ensure no visible background on hover/active */
+    background: transparent !important;
+    &:hover,
+    &:active,
+    &:focus {
+      background: transparent !important;
+      box-shadow: none !important;
     }
 
     svg {
       width: 1rem;
       height: 1rem;
+      display: block;
     }
   }
 
   &.theme--dark {
-    .collection-header-dropdown-trigger:hover {
-      background-color: var(--color-gray-90);
+    .collection-header-dropdown-trigger,
+    .collection-header-dropdown-trigger:hover,
+    .collection-header-dropdown-trigger:active,
+    .collection-header-dropdown-trigger:focus {
+      background: transparent !important;
     }
   }
 
