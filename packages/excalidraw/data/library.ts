@@ -339,6 +339,36 @@ class Library {
     );
   }
 
+  moveUpCollection = async (collectionId: string): Promise<void> => {
+    await this.setCollections((current) => {
+      const index = current.findIndex((c) => c.id === collectionId);
+      if (index <= 0) {
+        return current;
+      }
+      const newCollections = [...current];
+      [newCollections[index - 1], newCollections[index]] = [
+        newCollections[index],
+        newCollections[index - 1],
+      ];
+      return newCollections;
+    });
+  };
+
+  moveDownCollection = async (collectionId: string): Promise<void> => {
+    await this.setCollections((current) => {
+      const index = current.findIndex((c) => c.id === collectionId);
+      if (index === -1 || index >= current.length - 1) {
+        return current;
+      }
+      const newCollections = [...current];
+      [newCollections[index], newCollections[index + 1]] = [
+        newCollections[index + 1],
+        newCollections[index],
+      ];
+      return newCollections;
+    });
+  };
+
   setCollections = (
     collections:
       | LibraryCollections

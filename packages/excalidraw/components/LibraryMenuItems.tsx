@@ -455,7 +455,7 @@ export default function LibraryMenuItems({
         ))}
 
       {/* Custom Collections */}
-      {libraryCollections.map((collection) => {
+      {libraryCollections.map((collection, index) => {
         const items = collectionItems[collection.id] || [];
         const isCollapsed = customCollectionCollapsed[collection.id] ?? false;
 
@@ -519,6 +519,26 @@ export default function LibraryMenuItems({
                     }
                   }
                 }}
+                onMoveUp={async () => {
+                  try {
+                    await app.library.moveUpCollection(collection.id);
+                  } catch (error: any) {
+                    setAppState({
+                      errorMessage: error?.message || String(error),
+                    });
+                  }
+                }}
+                onMoveDown={async () => {
+                  try {
+                    await app.library.moveDownCollection(collection.id);
+                  } catch (error: any) {
+                    setAppState({
+                      errorMessage: error?.message || String(error),
+                    });
+                  }
+                }}
+                canMoveUp={index > 0}
+                canMoveDown={index < libraryCollections.length - 1}
               />
             </div>
             {!isCollapsed &&

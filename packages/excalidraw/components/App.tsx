@@ -743,6 +743,8 @@ class App extends React.Component<AppProps, AppState> {
         createLibraryCollection: this.library.createLibraryCollection,
         deleteLibraryCollection: this.library.deleteLibraryCollection,
         renameLibraryCollection: this.library.renameLibraryCollection,
+        moveUpCollection: this.library.moveUpCollection,
+        moveDownCollection: this.library.moveDownCollection,
         getLibraryCollections: this.library.getCollections,
         setLibraryCollection: this.library.setCollections,
         addFiles: this.addFiles,
